@@ -1,14 +1,15 @@
 #!/usr/bin/python
 #coding:utf-8
-import sys,paramiko,time
+import sys,paramiko,time,logging
 from os.path import basename
 
+logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
 try:
     groupName = sys.argv[1]
     serviceName = sys.argv[2]
     newWar = sys.argv[3]
 except Exception,e:
-    print 'Usage: bsyDeploy.py [nop|app|mgmt|preapp] [bms|mss1|mss2|pop...] /path/to/example.war'
+    logging.error('Usage: bsyDeploy.py [nop|app|mgmt|preapp] [bms|mss1|mss2|pop...] /path/to/example.war')
     sys.exit(199)
 
 data = {
@@ -45,7 +46,7 @@ data = {
 }
 
 if groupName not in data or serviceName not in data[groupName]:
-    print("Argument Errror! {0} doesn't exist OR {1} not in {2}".format(groupName,serviceName,groupName))
+    logging.error("Argument Errror! {0} doesn't exist OR {1} not in {2}".format(groupName,serviceName,groupName))
     sys.exit(198)
 
 username = 'test'
@@ -64,7 +65,7 @@ servers = data[groupName]['ip']
 oldWar = releaseName+'.war'
 selectedWar = basename(newWar)
 if oldWar != selectedWar:
-    print("Fatal Error: You want to deploy {0},but select {1}".format(serviceName,selectedWar))
+    logging.error("Fatal Error: You want to deploy {0},but select {1}".format(serviceName,selectedWar))
     sys.exit(250)
 
 for ip in servers:
@@ -73,7 +74,7 @@ for ip in servers:
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(ip,port,pkey=pkey)
     except Exception,e:
-        print e
+        logging.error(e)
         sys.exit(200)
 
     try:
@@ -81,11 +82,11 @@ for ip in servers:
         tunnel.connect(username=username,pkey=pkey)
         sftp = paramiko.SFTPClient.from_transport(tunnel)
     except Exception,e:
-        print e
+        logging.error(e)
         sys.exit(201)
 
     #stop tomcat
-    print "Stopping {0} service".format(serviceName)
+    logging.info("Stopping {0} service".format(serviceName))
     stdin,stdout,stdin = ssh.exec_command(stopCmd)
     time.sleep(10)
     #Delete old war files
@@ -93,26 +94,26 @@ for ip in servers:
     err = stderr.read()
     if err:
         print err
-        print 'Failed to rm old war files on {0}'.format(ip)
+        logging.error('Failed to rm old war files on {0}'.format(ip))
         sys.exit(202)
     #upload new war package to the destination server
-    print "Upload {0} to {1}".format(newWar,ip)
+    logging.info("Upload {0} to {1}".format(newWar,ip))
     sftp.put(newWar,uploadedFile)
     stdin,stdout,stderr = ssh.exec_command(mvCmd)
     err = stderr.read()
     if err:
-        print 'Failed to exec {0}'.format(mvCmd)
+        logging.error('Failed to exec {0}'.format(mvCmd))
         sys.exit(203)
     #start tomcat
-    print "Starting {0} service".format(serviceName)
+    logging.info("Starting {0} service".format(serviceName))
     stdin,stdout,stderr = ssh.exec_command(startCmd)
     err = stderr.read()
     if err:
-        print 'Failed to start {} service on {}'.format(serviceName,ip)
-        print err
+        logging.error('Failed to start {} service on {}'.format(serviceName,ip))
+        logging.error(err)
         sys.exit(204)
 
     sftp.close()
     tunnel.close()
     ssh.close()
-    print 'Successfully deployed {0} on {1}'.format(serviceName,ip)
+    logging.info('Successfully deployed {0} on {1}'.format(serviceName,ip))
